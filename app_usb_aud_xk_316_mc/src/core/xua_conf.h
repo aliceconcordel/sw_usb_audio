@@ -45,6 +45,11 @@
 #define XUA_ADAT_RX_EN     (0)
 #endif
 
+/* Number of PDM microphones - Default is 0 (disabled). Set via build config. */
+#ifndef XUA_NUM_PDM_MICS
+#define XUA_NUM_PDM_MICS   (0)
+#endif
+
 /* Enable/Disable Mixing core(s) - Default is on */
 #ifndef MIXER
 #define MIXER              (1)
@@ -73,7 +78,7 @@
 
 /* Number of USB streaming channels - by default calculate by counting audio interfaces */
 #ifndef NUM_USB_CHAN_IN
-#define NUM_USB_CHAN_IN    (I2S_CHANS_ADC + 2*XUA_SPDIF_RX_EN + 8*XUA_ADAT_RX_EN)  /* Device to Host */
+#define NUM_USB_CHAN_IN    (I2S_CHANS_ADC + XUA_NUM_PDM_MICS + 2*XUA_SPDIF_RX_EN + 8*XUA_ADAT_RX_EN)  /* Device to Host */
 #endif
 
 #ifndef NUM_USB_CHAN_OUT
@@ -168,5 +173,28 @@
 #ifndef HID_CONTROLS
 #define HID_CONTROLS       (0)
 #endif
+
+/*** Defines relating to PDM microphones (only active when XUA_NUM_PDM_MICS > 0) ***/
+#if (XUA_NUM_PDM_MICS > 0)
+
+/* Mic decimator output sample rate. Single fixed rate supported (16k/32k/48k). */
+#ifndef XUA_PDM_MIC_FREQ
+#define XUA_PDM_MIC_FREQ                (48000)
+#endif
+
+/* Single Data Rate capture: one microphone per data line (no DDR for a single mic) */
+#define MIC_ARRAY_CONFIG_USE_DDR        (0)
+
+/* PDM hardware resources - all on the audio tile (tile 1) */
+#define MIC_ARRAY_CONFIG_PORT_MCLK      XS1_PORT_1D     /* shared audio master clock (PORT_MCLK_IN) */
+#define MIC_ARRAY_CONFIG_PORT_PDM_CLK   XS1_PORT_1E     /* X1D12 - drives PDM clock to the mic   */
+#define MIC_ARRAY_CONFIG_PORT_PDM_DATA  XS1_PORT_1H     /* X1D23 - PDM data back from the mic     */
+#define MIC_ARRAY_CONFIG_CLOCK_BLOCK_A  XS1_CLKBLK_4    /* free clock block on the audio tile     */
+
+/* Place the mic sample(s) AFTER the I2S ADC channels in the USB input stream,
+ * otherwise PDM_MIC_INDEX defaults to 0 and collides with ADC channel 0. */
+#define PDM_MIC_INDEX                   (I2S_CHANS_ADC)
+
+#endif /* XUA_NUM_PDM_MICS > 0 */
 
 #endif

@@ -50,6 +50,20 @@ set(APP_HW_TARGET xk-audio-316-mc.xn)
 # Audio Class 2, Async, I2S Master, 8xInput, 8xOutput
 set(APP_COMPILER_FLAGS_2AMi8o8xxxxxx ${SW_USB_AUDIO_FLAGS})
 
+# Audio Class 2, Async, I2S Master, 8xInput + 1 PDM mic (9 in), 8xOutput. Locked to 48kHz.
+set(APP_COMPILER_FLAGS_2AMi9o8xxxxxx_mic1 ${SW_USB_AUDIO_FLAGS}  -DXUA_NUM_PDM_MICS=1
+                                                                -DXUA_PDM_MIC_FREQ=48000
+                                                                -DMIN_FREQ=48000
+                                                                -DMAX_FREQ=48000)
+
+# TEST: mic-only input - no analog inputs, so the PDM mic is USB input channel 1 (mono).
+# Lets Windows/Audacity see it as a plain mono mic (avoids the 2-channel capture limit). 48kHz.
+set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_mictest ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=1
+                                                                   -DXUA_PDM_MIC_FREQ=48000
+                                                                   -DMIN_FREQ=48000
+                                                                   -DMAX_FREQ=48000
+                                                                   -DI2S_CHANS_ADC=0)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
