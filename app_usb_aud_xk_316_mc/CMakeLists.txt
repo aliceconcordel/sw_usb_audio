@@ -64,6 +64,18 @@ set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_mictest ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                    -DMAX_FREQ=48000
                                                                    -DI2S_CHANS_ADC=0)
 
+# TEST: ULTRASONIC mic. 44.1k-family MCLK (22.5792MHz) / 5 = 4.51584MHz PDM = T5838 ultrasonic mode.
+# /32 (stage1) /1 (stage2) = 141.12kHz output, Nyquist 70.56kHz. First-pass reuses 48k filter
+# (band-limited ~29kHz) to validate clock/USB plumbing before designing the wide ultrasonic filter.
+set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_micus ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=1
+                                                                -DXUA_PDM_MIC_FREQ=141120
+                                                                -DMIN_FREQ=141120
+                                                                -DMAX_FREQ=141120
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=22579200
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=4515840
+                                                                -mcmodel=large)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
