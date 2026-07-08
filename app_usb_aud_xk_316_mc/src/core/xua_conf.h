@@ -182,14 +182,21 @@
 #define XUA_PDM_MIC_FREQ                (48000)
 #endif
 
-/* Single Data Rate capture: one microphone per data line (no DDR for a single mic) */
+/* 1 mic -> SDR (own data line);  2 mics -> DDR (both share one data line, opposite clock edges) */
+#if (XUA_NUM_PDM_MICS > 1)
+#define MIC_ARRAY_CONFIG_USE_DDR        (1)
+#else
 #define MIC_ARRAY_CONFIG_USE_DDR        (0)
+#endif
 
 /* PDM hardware resources - all on the audio tile (tile 1) */
 #define MIC_ARRAY_CONFIG_PORT_MCLK      XS1_PORT_1D     /* shared audio master clock (PORT_MCLK_IN) */
 #define MIC_ARRAY_CONFIG_PORT_PDM_CLK   XS1_PORT_1E     /* X1D12 - drives PDM clock to the mic   */
 #define MIC_ARRAY_CONFIG_PORT_PDM_DATA  XS1_PORT_1H     /* X1D23 - PDM data back from the mic     */
 #define MIC_ARRAY_CONFIG_CLOCK_BLOCK_A  XS1_CLKBLK_4    /* free clock block on the audio tile     */
+#if (XUA_NUM_PDM_MICS > 1)
+#define MIC_ARRAY_CONFIG_CLOCK_BLOCK_B  XS1_CLKBLK_5    /* second clock block, required for DDR   */
+#endif
 
 /* Place the mic sample(s) AFTER the I2S ADC channels in the USB input stream,
  * otherwise PDM_MIC_INDEX defaults to 0 and collides with ADC channel 0. */

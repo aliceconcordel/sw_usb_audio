@@ -87,6 +87,15 @@ set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_mic96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_M
                                                                 -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
                                                                 -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
 
+# TWO PDM mics via DDR. Both share CLK (X1D12) + DATA (X1D23); mic#2 SELECT->1.8V so it drives on
+# the opposite clock edge. XUA_NUM_PDM_MICS=2 auto-enables DDR + CLOCK_BLOCK_B in xua_conf.h.
+# I2S_CHANS_ADC=0 -> the 2 mics are USB input channels 1-2 (stereo). 48kHz.
+set(APP_COMPILER_FLAGS_2AMi2o8xxxxxx_mic2_48 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=2
+                                                                -DXUA_PDM_MIC_FREQ=48000
+                                                                -DMIN_FREQ=48000
+                                                                -DMAX_FREQ=48000
+                                                                -DI2S_CHANS_ADC=0)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
