@@ -76,6 +76,17 @@ set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_micus ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_M
                                                                 -DMIC_ARRAY_CONFIG_PDM_FREQ=4515840
                                                                 -mcmodel=large)
 
+# 96kHz HighQuality mic. 48k-family MCLK (24.576MHz) / 8 = 3.072MHz PDM = T5838 HighQuality mode.
+# /32 (stage1) /1 (stage2) = 96kHz output. Reuses 48k filter; in HQ mode mic BW is ~20kHz so the
+# ~24kHz filter passband is no real loss. Standard USB rate -> no Windows Code 10.
+set(APP_COMPILER_FLAGS_2AMi1o8xxxxxx_mic96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=1
+                                                                -DXUA_PDM_MIC_FREQ=96000
+                                                                -DMIN_FREQ=96000
+                                                                -DMAX_FREQ=96000
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)

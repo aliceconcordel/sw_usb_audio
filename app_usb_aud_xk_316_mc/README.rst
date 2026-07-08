@@ -34,8 +34,17 @@ PDM Microphone (T5838) — build, run and record on Linux
 .......................................................
 
 This fork adds single PDM-microphone support (TDK T5838 on the board's 1.8 V GPIO pins
-X1D12/X1D23, ports 1E/1H — no level shifter needed). The known-good config is
-``2AMi1o8xxxxxx_mictest`` (mic-only, mono, 48 kHz).
+X1D12/X1D23, ports 1E/1H — no level shifter needed). Mic-only configs (no analog inputs, so the
+mic is the single mono USB input):
+
+- ``2AMi1o8xxxxxx_mictest`` — 48 kHz, known-good.
+- ``2AMi1o8xxxxxx_mic96`` — 96 kHz (HighQuality mode, PDM 3.072 MHz). Output level matches the
+  48 kHz config (benchmarked, within ~1 dB). In HQ mode the T5838 is specified to ~20 kHz
+  bandwidth (its ultrasonic response needs the 4.2-4.8 MHz clock), so 96 kHz is *not expected* to
+  add usable content above ~20 kHz — though this has not been measured directly (the benchmark
+  sweep stopped at 20 kHz).
+
+Substitute the config name you want in the build/run commands below.
 
 Set up the XTC Tools environment. ``SetEnv`` derives its paths from ``$PWD``, so it must be
 sourced from inside the tools directory::
@@ -59,10 +68,14 @@ udev rules shipped with the tools, then replug the XTAG DEBUG cable::
     cd /path/to/XMOS/XTC/15.3.1/scripts && sudo ./setup_xmos_devices.sh
 
 Record with Audacity: set the audio host (ALSA / PulseAudio / PipeWire), select
-**XMOS xCORE.ai MC (UAC2.0)** as the input, set channels to **1 (Mono)** and the project rate
-to **48000 Hz**, then Record. Quick command-line check (``hw:N`` from ``arecord -l``)::
+**XMOS xCORE.ai MC (UAC2.0)** as the input, set channels to **1 (Mono)** and the project rate to
+match the config (**48000** or **96000 Hz**), then Record. Quick command-line check
+(``hw:N`` from ``arecord -l``; use the matching rate)::
 
-    arecord -D hw:3,0 -c 1 -f S24_3LE -r 48000 -d 3 test.wav && aplay test.wav
+    arecord -D hw:3,0 -c 1 -f S32_LE -r 48000 -d 3 test.wav && aplay test.wav
+
+Note the capture format is **S32_LE**, not S24_3LE: XMOS UAC2.0 presents its 24-bit samples
+left-justified in a 32-bit container, so ``arecord`` will reject ``S24_3LE``.
 
 Known Issues
 ............
