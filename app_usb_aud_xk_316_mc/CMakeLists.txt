@@ -96,6 +96,17 @@ set(APP_COMPILER_FLAGS_2AMi2o8xxxxxx_mic2_48 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                 -DMAX_FREQ=48000
                                                                 -DI2S_CHANS_ADC=0)
 
+# TWO PDM mics via DDR @ 96kHz HighQuality. Combines the 2-mic DDR setup with the 96k HQ clocking
+# (MCLK 24.576MHz / 8 = 3.072MHz PDM). XUA_NUM_PDM_MICS=2 auto-enables DDR + CLOCK_BLOCK_B.
+# Stereo (2ch) USB input at 96kHz.
+set(APP_COMPILER_FLAGS_2AMi2o8xxxxxx_mic2_96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=2
+                                                                -DXUA_PDM_MIC_FREQ=96000
+                                                                -DMIN_FREQ=96000
+                                                                -DMAX_FREQ=96000
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
