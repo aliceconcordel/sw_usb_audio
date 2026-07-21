@@ -107,6 +107,20 @@ set(APP_COMPILER_FLAGS_2AMi2o8xxxxxx_mic2_96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                 -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
                                                                 -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
 
+# FOUR PDM mics, SDR (one data line per mic) on the 4-bit PORT_4F (X1D28-31, broken-out GPIO).
+# Each mic's DATA -> 1.8V->3.3V level shifter (Adafruit TXB0104) -> its own pin/bit of the 4-bit
+# PORT_4F; CLOCK stays on X1D12 (1.8V) direct to all mics; all mics SELECT->GND. Overrides DDR off +
+# the data port (see xua_conf.h). I2S_CHANS_ADC=0 -> the 4 mics are USB input channels 1-4. 48kHz.
+# VERIFIED on hardware 2026-07-21: all 4 mics live, ~30-40 dB channel isolation, no PORT_16B clash.
+# Channel map (natural port-bit order): X1D28->ch1, X1D29->ch2, X1D30->ch3, X1D31->ch4.
+set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_48 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=4
+                                                                -DXUA_PDM_MIC_FREQ=48000
+                                                                -DMIN_FREQ=48000
+                                                                -DMAX_FREQ=48000
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_USE_DDR=0
+                                                                -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)

@@ -182,19 +182,25 @@
 #define XUA_PDM_MIC_FREQ                (48000)
 #endif
 
-/* 1 mic -> SDR (own data line);  2 mics -> DDR (both share one data line, opposite clock edges) */
+/* Data-rate mode & data port. Defaults: 1 mic -> SDR on 1-bit 1H; >1 mic -> DDR (mics share the
+ * one 1H data line on opposite clock edges). A build config can OVERRIDE these — e.g. 4 mics SDR on
+ * the 4-bit PORT_4F — by passing -DMIC_ARRAY_CONFIG_USE_DDR=0 -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=... */
+#ifndef MIC_ARRAY_CONFIG_USE_DDR
 #if (XUA_NUM_PDM_MICS > 1)
 #define MIC_ARRAY_CONFIG_USE_DDR        (1)
 #else
 #define MIC_ARRAY_CONFIG_USE_DDR        (0)
 #endif
+#endif
 
 /* PDM hardware resources - all on the audio tile (tile 1) */
 #define MIC_ARRAY_CONFIG_PORT_MCLK      XS1_PORT_1D     /* shared audio master clock (PORT_MCLK_IN) */
-#define MIC_ARRAY_CONFIG_PORT_PDM_CLK   XS1_PORT_1E     /* X1D12 - drives PDM clock to the mic   */
-#define MIC_ARRAY_CONFIG_PORT_PDM_DATA  XS1_PORT_1H     /* X1D23 - PDM data back from the mic     */
+#define MIC_ARRAY_CONFIG_PORT_PDM_CLK   XS1_PORT_1E     /* X1D12 - drives PDM clock to the mic(s) */
+#ifndef MIC_ARRAY_CONFIG_PORT_PDM_DATA
+#define MIC_ARRAY_CONFIG_PORT_PDM_DATA  XS1_PORT_1H     /* X1D23 - PDM data (1-bit; 1 mic or 2-mic DDR) */
+#endif
 #define MIC_ARRAY_CONFIG_CLOCK_BLOCK_A  XS1_CLKBLK_4    /* free clock block on the audio tile     */
-#if (XUA_NUM_PDM_MICS > 1)
+#if (MIC_ARRAY_CONFIG_USE_DDR)
 #define MIC_ARRAY_CONFIG_CLOCK_BLOCK_B  XS1_CLKBLK_5    /* second clock block, required for DDR   */
 #endif
 
