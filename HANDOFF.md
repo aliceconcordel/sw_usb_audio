@@ -6,9 +6,10 @@ Working notes for continuing this work (e.g. after switching machine/OS). Read t
 Stream TDK **T5838 PDM microphone(s)** through an **XK-AUDIO-316-MC** board
 (XU316-1024-TQ128-C24) out over USB Audio. Milestone 1: one mic (DONE).
 Milestone 2: **2-mic DDR stereo array (DONE — verified 2026-07-08)**.
-End goal: a **4-mic array for beamforming** (colleague handles the algorithm).
+Milestone 3: **4-mic array (DONE — verified 2026-07-21)**.
+End goal: a **4-mic array for beamforming** (colleague handles the algorithm) — HW is now in place.
 
-## Status (updated 2026-07-08 — all working on LINUX; see "Linux env" below)
+## Status (updated 2026-07-10 — all working on LINUX; see "Linux env" below)
 - ✅ **1 mic @ 48 kHz** — end-to-end, known-good. Config `2AMi1o8xxxxxx_mictest`.
 - ✅ **1 mic @ 96 kHz HighQuality** — builds/runs/records. Config `2AMi1o8xxxxxx_mic96`
   (PDM 3.072 MHz via 48k-family MCLK 24.576/8). Committed `d2488d6`. NOTE: the earlier worry
@@ -18,6 +19,9 @@ End goal: a **4-mic array for beamforming** (colleague handles the algorithm).
 - ✅ **2-mic DDR stereo array** — WORKS, both channels verified independent (Audacity + tap test).
   Config `2AMi2o8xxxxxx_mic2_48` (48 kHz stereo). Committed `c032bae`. This is the array foundation.
   Benchmarks in `Recordings/mic2_48/` (git-ignored). Pushed to origin/my-changes @ `48bef45`.
+- ✅ **2-mic DDR stereo @ 96 kHz** — WORKS, both channels verified (tap test). Config
+  `2AMi2o8xxxxxx_mic2_96` — a straight combine of the DDR 2-mic + 96k HQ clocking. Benchmarks in
+  `Recordings/mic2_96/` (git-ignored). Levels healthy, in line with the other configs.
 - 🅿️ **141.12 kHz ultrasonic** (`2AMi1o8xxxxxx_micus`) — parked. Enumerates at 141.12 kHz on the
   board (clock plumbing proven) but was blocked on Windows Code 10; never recorded/verified.
   True ultrasonic (>20 kHz) is a separate, bigger project (see the ultrasonic section below).
@@ -117,8 +121,81 @@ is the crux of the remaining ultrasonic work:
 - We shipped Option A (HQ 96k, `2AMi1o8xxxxxx_mic96`): clean for ≤20 kHz audio, no ultrasonic content.
 
 ## Remaining / next
-1. **4-mic array** — at the 2-mic ceiling of the two 1.8 V pins (1 clk + 1 DDR data = 2 mics).
-   Going to 4 needs level shifters (3.3 V ports ↔ 1.8 V mics) or more 1.8 V pins. HARDWARE decision.
+1. **4-mic array** — see the detailed port investigation below. THE current active task.
 2. **True ultrasonic (>20 kHz)** — the separate project above (Option 1 or 2), if/when needed.
 3. **Measure, don't assume** — actually probe the >20 kHz region at 96k (sweep past 20 kHz with an
    ultrasonic-capable source) to turn "HQ mode has no content >20 kHz" from spec-based into measured.
+
+## 4-mic array — port investigation (2026-07-08)
+Assume T5838 is **1.8 V only** (user is confirming with TDK; 3.3 V explored, datasheet says no) →
+level shifters ARE required to reach 4 mics.
+
+### Level shifting (only the DATA lines need it)
+- Clock stays on X1D12 (1E, 1.8 V) direct to all mics — NO shifter needed (fan-out is fine).
+- Each PDM data line needs a FAST unidirectional 1.8 V→3.3 V translator. PDM toggles at 3.072 MHz
+  (HQ) / ~4.5 MHz (ultrasonic).
+- ⚠️ Do NOT use BSS138 "logic level converter" breakouts (I2C-speed, ≤~1 MHz).
+- Reliable endgame part: fixed-direction TI SN74LVC2T45 / SN74AVC2T245 (or 4-ch SN74LVC4T245 for
+  the 4 SDR data lines). A-side=1.8 V (mics), B-side=3.3 V (XMOS).
+- **TXB0104 (user HAS one) = OK for PROTOTYPING the 4 data lines.** It's 4-ch = exactly 4 SDR mics.
+  Its worst cases (bidirectional buses, continuous clocks) are BOTH avoided here: PDM data is
+  unidirectional, and the clock stays 1.8 V direct on 1E (never through the shifter). 3 MHz << its
+  ~100 Mbps rating. Real risk = weak drivers (~4 kΩ) drooping with trace capacitance → noise/glitches.
+  Wire: A=1.8 V mics (VCCA=1.8), B=3.3 V XMOS PORT_4F (VCCB=3.3), **OE pin HIGH**, common gnd,
+  SHORT traces. If recordings are noisy/garbled → swap to LVC. Good enough to prove 4 mics work.
+
+### Port map facts (authoritative — from XTC tools configs/XS3-UnA-1024-TQ128.pkg)
+Re-derive with: `awk '...' configs/XS3-UnA-1024-TQ128.pkg` (parse <Pin>/<Port> blocks; filter X1D).
+- **XS3 has NO 2-bit ports** (widths are 1/4/8/16/32). >1 data line ⇒ need a 4-bit port.
+- The "free" ADC pins 1I–1L (X1D24/25/34/35) are **1-bit-only** → useless for a multi-line data port.
+- Chip-free 4-bit ports were 4C/4D/4E/4F; had to cross-check the BOARD net table (hardware manual)
+  to see which are physically broken out — that's the real gate.
+
+### THE GATE — RESOLVED (board net table, XK-AUDIO-316-MC hardware manual, 2026-07-08)
+Checked the board "Pin / Port / Board Net" table. Findings for the candidate 4-bit ports:
+- **PORT_4D (X1D16–19) = NO GOOD** — board net XL_UP*/XL_DN* = **xSCOPE DEBUG xLink**. Using it
+  sacrifices xSCOPE trace/debug output and the pins route to the debug circuit. Avoid.
+- **PORT_4F (X1D28,29,30,31) = ✅ TARGET for 4 mics.** All four are broken-out **GPIO** (board net =
+  pin name), contiguous → easy to route. 4 mics SDR (all SELECT→GND) or 8 mics DDR.
+- **PORT_4E (X1D26,27,32,33) = ✅** also all GPIO, but split pins (less convenient).
+- **PORT_8C (X1D26–X1D33) = ✅ full 8-bit GPIO port** → up to 8 SDR / 16 DDR mics. Use THIS if the
+  array may grow past 4 (future-proof).
+- Lone GPIO pins also broken out: X1D09, X1D12 (=1.8V, current mic clk), X1D15 — but 1-bit only.
+
+### Firmware for 4 mics — ✅ VERIFIED ON HARDWARE 2026-07-21
+- `xua_conf.h` REFACTORED: `MIC_ARRAY_CONFIG_USE_DDR` and `_PORT_PDM_DATA` are now `#ifndef`-guarded
+  so a build config can override them. Existing mic1/mic2 configs unchanged (still DDR-on-1H).
+- Config `2AMi4o8xxxxxx_mic4_48`: XUA_NUM_PDM_MICS=4, 48kHz, I2S_CHANS_ADC=0, SDR
+  (`-DMIC_ARRAY_CONFIG_USE_DDR=0`), `-DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F`.
+- Built clean — NO PORT_16B/4F (MCLK_COUNT_2) clash after all. Enumerates 4ch UAC2.0.
+- Tap test (analysed in numpy): all 4 mics live, ~30-40 dB channel isolation, SDR de-interleave
+  correct. **Channel map = natural port-bit order: X1D28->ch1, X1D29->ch2, X1D30->ch3, X1D31->ch4.**
+- Wired via Adafruit TXB0104 (1875) level shifter, OE self-enabled (onboard 10k pull-up), NO
+  decoupling caps — and they turn out NOT to be needed: controlled benchmarks show a clean matched
+  noise floor (the earlier ~-90 dBFS was an uncontrolled/handling recording, not the real floor).
+- `2AMi4o8xxxxxx_mic4_96` — same 4-mic SDR array @ 96kHz (adds the 96k HQ clocking; PDM is 3.072MHz
+  at BOTH rates so NO rewiring). VERIFIED 2026-07-21.
+- BENCHMARKS (Recordings/mic4_{48,96}/, 4ch, git-ignored):
+  * 48k silence ~-108 dBFS (all 4 ch matched); 96k silence ~-114 dBFS (all 4 ch matched, best yet).
+  * Channels balanced within ~1 dB on speech; all-positive correlation on speech (shared voice).
+  * 1kHz tone: mic pairs (1,3) & (2,4) at ~-1.00 correlation (half-wavelength anti-phase) → real
+    spatial diversity. Array is beamformer-ready.
+- TODO polish (optional): tie unused-bit port inputs to GND if a config ever uses < full port width.
+
+### Wiring the 4 mics (BOM + connections)
+- BOM: 4× T5838 (on breakouts), the TXB0104 (4-ch, user has it), 1.8V supply (AP3429A buck),
+  **4× 0.1µF ceramic decoupling caps — MUST ADD, user confirmed breakouts have NONE** (one per mic
+  VDD, close to the pin — else supply noise → hiss), short hook-up wire.
+- CLOCK: X1D12 (1.8V, PORT_1E) → fan out to all 4 mics' CLK. DIRECT, no shifter.
+- DATA (through TXB0104, A=1.8V in, B=3.3V out): mic1→X1D28(P4F0), mic2→X1D29(P4F1),
+  mic3→X1D30(P4F2), mic4→X1D31(P4F3).
+- ALL 4 mics SELECT→GND (SDR). TXB: VCCA=1.8V, VCCB=3.3V, **OE→HIGH**, all grounds common.
+- Confirm X1D28-31 are on a reachable header/pad (net table says GPIO → should be broken out).
+- ⚠️ data through TXB, clock stays 1.8V direct (don't route clock through the shifter).
+⚠️ BUILD-TIME CHECK: 4E/4F/8C share pins with PORT_16B (declared PORT_MCLK_COUNT_2 in the .xn). If
+the firmware uses MCLK_COUNT_2 on tile 1, the tools will flag a port-resource clash when claiming
+4F/8C — resolve by relocating/dropping MCLK_COUNT_2 (likely unused in the mic config).
+
+### Still required regardless: level shifters
+3.3 V port ↔ 1.8 V mics. Data lines only (clock stays 1.8 V on 1E). FAST fixed-direction translators
+(SN74LVC2T45 / LVC4T245); NOT BSS138 breakouts, NOT auto-dir TXB/TXS. See level-shifting notes above.

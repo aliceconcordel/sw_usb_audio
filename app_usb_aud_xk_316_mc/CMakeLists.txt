@@ -121,6 +121,18 @@ set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_48 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                 -DMIC_ARRAY_CONFIG_USE_DDR=0
                                                                 -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F)
 
+# Same 4-mic SDR array as mic4_48 but @ 96kHz HighQuality (MCLK 24.576MHz/8 = 3.072MHz PDM - the
+# SAME PDM clock as 48k, so no rewiring). Wiring/channel map identical to mic4_48.
+set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=4
+                                                                -DXUA_PDM_MIC_FREQ=96000
+                                                                -DMIN_FREQ=96000
+                                                                -DMAX_FREQ=96000
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_USE_DDR=0
+                                                                -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
