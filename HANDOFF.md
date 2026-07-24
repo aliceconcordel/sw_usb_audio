@@ -2,6 +2,26 @@
 
 Working notes for continuing this work (e.g. after switching machine/OS). Read this first.
 
+## 2026-07-24 update: filter decision made, code regenerated from scratch
+Decision on "the decision" below: **accept ~-55 dBFS** (target use case is explosions - loud,
+transient sources, so bandwidth matters more than noise floor). Of the tested filters, **CIC
+order 7** (`test_us_ma7.wav`) was picked over the custom FIR designs: ~46-48 kHz passband
+(wider) vs ~-51 dBFS floor (a bit worse than the FIR's -55/-57, an acceptable trade for this
+use case).
+
+Alice's local uncommitted `mic_array.cpp` patch + `filter_design/` scripts for this were lost.
+They've been regenerated from scratch (not from memory - re-derived using XMOS's public
+`lib_mic_array` filter-design toolchain) on branch `pm-ultrasonic-tests`:
+- `filter_design/design_ultrasonic_cic7.py` — regenerates the CIC-7 filter `.pkl`.
+- `ULTRASONIC_FILTER_INTEGRATION.md` — exact steps to turn that into a header and wire it into
+  `mic_array.cpp` (this part needs a human with the actual file in front of them - it wasn't
+  possible to blind-edit a file that isn't in this repo).
+- `run_ultrasonic_test.sh` — one command to build/flash/record the `2AMi4o8xxxxxx_mic4_us`
+  config once the above is wired in.
+- New CMake config `2AMi4o8xxxxxx_mic4_us` in `app_usb_aud_xk_316_mc/CMakeLists.txt` (4-mic
+  SDR/PORT_4F wiring, identical to mic4_48/mic4_96 - no rewiring - with the ultrasonic clock:
+  MCLK 22.5792 MHz / PDM 4.51584 MHz / 141.12 kHz out).
+
 ## Goal
 Stream TDK **T5838 PDM microphone(s)** through an **XK-AUDIO-316-MC** board
 (XU316-1024-TQ128-C24) out over USB Audio. Milestone 1: one mic (DONE).

@@ -133,6 +133,29 @@ set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_96 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                 -DMIC_ARRAY_CONFIG_MCLK_FREQ=24576000
                                                                 -DMIC_ARRAY_CONFIG_PDM_FREQ=3072000)
 
+# Same 4-mic SDR array as mic4_48/mic4_96, but in T5838 ULTRASONIC mode: 44.1k-family MCLK
+# (22.5792MHz) / 5 = 4.51584MHz PDM, /32(stage1)/1(stage2) = 141.12kHz out, Nyquist 70.56kHz.
+# Wiring/channel map identical to mic4_48/mic4_96 (clock stays 1.8V direct, no rewiring).
+# -mcmodel=large: buffers overflow the 16-bit DP window at this rate (same as the old single-mic
+# `micus` config). -DSAMPLE_RATE_LIST=141120: 141120 is a non-standard USB Audio rate, so lib_xua's
+# clock-range handler would otherwise advertise zero rates ("no configurations available" /
+# Windows Code 10) - this hook forces the rate to be advertised (see HANDOFF.md).
+# Stage-1/stage-2 filter: 7-stage moving-average (CIC) + compensation FIR, ~46-48kHz passband,
+# ~-51dBFS noise floor - chosen over the narrower/cleaner FIR designs because our ultrasonic
+# sources (explosions) are loud transients where bandwidth matters more than noise floor.
+# See filter_design/design_ultrasonic_cic7.py and ULTRASONIC_FILTER_INTEGRATION.md.
+set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_us ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=4
+                                                                -DXUA_PDM_MIC_FREQ=141120
+                                                                -DMIN_FREQ=141120
+                                                                -DMAX_FREQ=141120
+                                                                -DSAMPLE_RATE_LIST=141120
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_USE_DDR=0
+                                                                -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=22579200
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=4515840
+                                                                -mcmodel=large)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
