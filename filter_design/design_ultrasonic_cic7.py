@@ -86,7 +86,10 @@ def ultrasonic_cic7_filter(int_coeffs=True):
     # order-7 recording (test_us_ma7.wav): flat to ~44-46 kHz, floor by ~52 kHz.
     cutoff = 46000
     transition_bandwidth = 4000
-    taps_2 = 256
+    # 96 taps (not 256): the working test_us_ma7.wav filter used a 96-tap stage 2. At 256 taps the
+    # coefficient sum overflows the emitter's int64 shift calc (Right-shift = INT32_MIN / garbage);
+    # 96 easily covers this cutoff/transition and reproduces the proven ~-50 dBFS result.
+    taps_2 = 96
     fir_window = ("kaiser", 7)
     stage_2 = stage_params(cutoff, transition_bandwidth, taps_2, fir_window)
 
