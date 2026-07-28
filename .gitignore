@@ -51,3 +51,6 @@ Bach_loopback.mid
 # Local audio recordings
 Recordings/
 *.wav
+
+# Generated filter-design artifacts (regenerate via filter_design/*.py -> stage1.py/stage2.py)
+*.pkl
