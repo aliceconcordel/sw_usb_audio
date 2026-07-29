@@ -54,3 +54,10 @@ Recordings/
 
 # Generated filter-design artifacts (regenerate via filter_design/*.py -> stage1.py/stage2.py)
 *.pkl
+
+# Claude Code local settings
+.claude/
+
+# Superseded FIR filter explorer - kept locally only; CIC-7 was the chosen design
+# and its findings are already recorded in HANDOFF.md
+filter_design/design_ultrasonic_fir.py
