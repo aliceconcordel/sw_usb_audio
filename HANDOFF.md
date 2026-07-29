@@ -2,6 +2,14 @@
 
 Working notes for continuing this work (e.g. after switching machine/OS). Read this first.
 
+> **2026-07-29 — recordings have moved off the system disk.** Every `.wav`
+> referenced below (`test_us_cic7.wav`, `test_us_ma7.wav`, `test_us_filt1-2`, …)
+> now lives on the external drive at
+> `/media/alice/New Volume/XMOS_Recordings_Backup/`, not in this repo — the
+> 39 GB root partition kept filling up. Nothing was deleted.
+> See [SESSION_2026-07-29_gccphat_linux.md](SESSION_2026-07-29_gccphat_linux.md)
+> for that session (gccphat-realtime on Linux + YAMNet); no firmware was changed.
+
 ## 2026-07-24 update: filter decision made, code regenerated from scratch
 Decision on "the decision" below: **accept ~-55 dBFS** (target use case is explosions - loud,
 transient sources, so bandwidth matters more than noise floor). Of the tested filters, **CIC
