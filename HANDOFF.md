@@ -65,6 +65,74 @@ wrong time base.**
 A `static_assert` in `mic_array.cpp` now catches this at build time. It would have caught it on
 day one; keep it.
 
+#### Why the library lets you do this, and why almost nobody hits it
+
+`lib_mic_array` supplies a helper for exactly this calculation, documented as *"This function is
+simple integer division"*:
+
+```c
+static inline unsigned mic_array_mclk_divider(mclk, pdm) { return mclk / pdm; }
+```
+
+Its result is then passed to `clock_set_divide(clk, divide/2)`, and the hardware divides by
+`2 * that`. So there are **two truncating integer divisions in series**, and the PDM clock only
+comes out as requested if `MCLK / PDM` is an exact **EVEN** integer. Nothing in the API, the
+documentation or the code validates this — the constraint is not stated in the lib_mic_array
+overview or getting-started pages, which only note that the default filters "assume a fixed input
+PDM frequency of 3.072 MHz".
+
+Searched 2026-08-04: no public report of this specific bug. Note XMOS route bug reports through
+their support portal rather than GitHub issues, so absence of a public report means little. There
+is a close sibling precedent though — `lib_i2s` issue #22, *"TDM master only supports /2^n MCLK to
+SCLK divide ratios"* — the same class of undocumented divider constraint in another XMOS library.
+
+**Almost nobody hits it because the standard path can't.** Conventional PDM clocks are
+1.024 / 2.048 / 3.072 / 4.096 MHz, and dividing the 48 kHz-family master clock by any of them gives
+an even number:
+
+```
+24.576 / 3.072 = 8      24.576 / 4.096 = 6
+24.576 / 2.048 = 12     24.576 / 1.024 = 24
+```
+
+The library default (24.576 / 3.072 = 8) is even, as is every ordinary variation. Note also
+22.5792 / 3.072 = 7.35 — not even an integer, so anyone pairing the 44.1 kHz master clock with a
+standard PDM rate gets no usable clock at all and notices immediately.
+
+**Triggering it needed all three of our unusual choices:**
+
+1. Ultrasonic mode at all — the T5838's 4.2-4.8 MHz window is far above every standard PDM clock.
+2. The 44.1 kHz clock family — we wanted 141.12 kHz = 44100 x 3.2, forcing MCLK_441 = 22.5792 MHz.
+   PDM mic work is overwhelmingly 48 kHz-family.
+3. The arithmetic landing on an integer that happens to be ODD: 22.5792 / 4.51584 = 5.
+
+Had the ratio been non-integer it would have failed loudly on day one; had we needed 4.096 MHz from
+the 48 kHz clock we would have got divider 6 and never noticed. **It took an exact-but-odd integer
+to fail silently.** Worth reporting to XMOS support — the `static_assert` is the useful payload,
+since it states the constraint precisely.
+
+#### For comparison: what the Arduino PDM library does
+
+Relevant to the sister project (`~/Documents/xKozmosArduino`, Portenta H7). From
+`mbed_portenta/4.4.1/libraries/PDM/src/STM32H747_SAI/audio.c`, `get_mck_div()` — decimation is
+fixed at 64 and the PDM clock scales with the requested rate:
+
+| requested | PDM clock (SCK_x) |
+| --- | --- |
+| 8 kHz | 1.024 MHz |
+| 16 kHz | 2.048 MHz |
+| 32 kHz | 4.096 MHz |
+| 44 kHz | **5.6448 MHz** (the same clock the XMOS board landed on by accident) |
+| 48 kHz | 6.144 MHz |
+| 64 kHz | 8.192 MHz |
+| 96 kHz | **12.288 MHz** |
+| 192 kHz | 24.576 MHz |
+
+⚠️ The MP34DT01 used there is specified to roughly 1.2-3.25 MHz PDM clock. So anything above
+`PDM.begin(ch, 32000)` drives that mic **out of spec**, and the 96 kHz setting used in
+`Sandbox/PDMSerialPlotter_96k.cpp` clocks it at 12.288 MHz — nearly 4x its maximum. Worth checking
+before trusting any high-rate Arduino PDM measurement.
+
 ### Consequence: the mic is NOT in ultrasonic mode
 
 5.6448 MHz is **above** the T5838's 4.2-4.8 MHz ultrasonic window. And because only MCLK/(2n) is
