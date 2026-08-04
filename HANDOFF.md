@@ -10,6 +10,158 @@ Working notes for continuing this work (e.g. after switching machine/OS). Read t
 > See [SESSION_2026-07-29_gccphat_linux.md](SESSION_2026-07-29_gccphat_linux.md)
 > for that session (gccphat-realtime on Linux + YAMNet); no firmware was changed.
 
+## 2026-08-04: noise floor fixed (-49.9 -> -107.6 dBFS) AND a long-standing clock bug found
+
+Two separate findings today. **Use config `2AMi4o8xxxxxx_mic4_882`** (88.2 kHz); `mic4_us` and the
+short-lived `mic4_us64` are both superseded and their recordings have a WRONG TIME BASE.
+
+> ⚠️ An earlier version of this section claimed the PDM clock was 4.51584 MHz and that the mic was
+> in ultrasonic mode. **Both were wrong** — disproven the same day by direct measurement. Corrected
+> below.
+
+### Finding 1 — the decimation was structurally starved (real, and fixed)
+
+`mic4_us` was not mistuned; it hit its design target exactly (`design_ultrasonic_cic7.py` predicted
+-50.2 dBFS, measured -49.9). The problem was the split:
+
+- `decimations = [32, 1]` meant stage 2 did **no decimation at all** — purely droop compensation.
+- So a single /32 CIC had to reject all 32 fold-back bands alone: stopband ~-38 dB, against the
+  proven 48k path's ~-94 dB.
+- OSR was only **32**, half the 48k path's 64.
+
+Decimating in *both* stages — `[32, 2]`, exactly what the working 48k path does — moved the noise
+floor **58 dB**:
+
+| | silence RMS | dBFS |
+| --- | --- | --- |
+| `mic4_us` (/32) | 3.20e-3 | **-49.9** |
+| /64 | ~4.1e-6 | **-107.6** |
+
+All four channels within 1 dB. -107.6 dBFS is essentially the T5838's own 107 dB dynamic range —
+**the floor is now set by the microphone, not the decimator**, which is what the datasheet asks for
+(it wants ~10 dB more dynamic range in the decimator than in the mic; the old design was ~60 dB
+short). This result is independent of Finding 2, because RMS does not depend on sample rate.
+
+### Finding 2 — the PDM clock has NEVER been what the configs asked for
+
+Symptom: a 1 kHz tone recorded at the nominal rate read **750 Hz** — content running 4/3 slow.
+Confirmed against a laptop-mic capture of the same sound reading 1000.02 Hz, so the board was at
+fault, not the playback.
+
+**Root cause.** `mic_array_resources_configure()` calls `clock_set_divide(clk, divide/2)`, and
+xcore clock blocks then divide by `2*that`. So only **MCLK/(2n)** is reachable, and an ODD
+`MIC_ARRAY_CONFIG_MCLK_FREQ / MIC_ARRAY_CONFIG_PDM_FREQ` is silently truncated:
+
+```
+22579200 / 4515840 = 5   ->  clock_set_divide(5/2 = 2)  ->  MCLK/4 = 5.6448 MHz
+```
+
+**MEASURED with a logic analyser on X1D12 (port 1E): 5,644,514 Hz** — i.e. MCLK/4, matching the
+truncation prediction to 0.005%, and NOT the 4.51584 MHz requested. Method: `sigrok-cli` +
+`fx2lafw` at 24 MS/s for 1 s, counting transitions (11,289,028 / 2 / 1 s). Both `mic4_us` and
+`mic4_us64` requested that unrealisable clock, so **every ultrasonic recording before today has a
+wrong time base.**
+
+A `static_assert` in `mic_array.cpp` now catches this at build time. It would have caught it on
+day one; keep it.
+
+### Consequence: the mic is NOT in ultrasonic mode
+
+5.6448 MHz is **above** the T5838's 4.2-4.8 MHz ultrasonic window. And because only MCLK/(2n) is
+reachable, **no even divider from either standard MCLK lands in that window**:
+
+| MCLK | /2 | /4 | /6 | /8 |
+| --- | --- | --- | --- | --- |
+| 22.5792 (44.1k) | 11.290 | **5.6448** (in use) | 3.7632 | 2.8224 |
+| 24.576 (48k) | 12.288 | 6.144 | 4.096 | 3.072 |
+
+Reaching 4.51584 MHz needs a **non-standard MCLK** (e.g. 18.06336 MHz /4, or 27.0 MHz /6 = 4.5 MHz)
+— a real audio-clocking change, not a build flag. OPEN QUESTION: can the board's clock generator
+(`CS2100` / SW PLL, see `src/extensions/audiohw.xc`) be programmed for that?
+
+Note the mic is evidently NOT in plain High Quality mode either: it passes content well past
+20 kHz, with the filter rather than the mic setting the limit. What mode it is actually in at
+5.6448 MHz is not established.
+
+### The fix that landed: config `mic4_882`
+
+Rather than chase the mode, first make the config **describe what the hardware really does**:
+
+```
+MCLK 22.5792 MHz / 4 = 5.6448 MHz PDM   (divider 4 — EVEN, realisable, no truncation)
+/32 (stage 1 CIC) /2 (stage 2 FIR)      = 88,200 Hz out, Nyquist 44.1 kHz, OSR 64
+```
+
+Choosing 88200 rather than an arbitrary number pays off three ways:
+
+- **Standard rate** (2 x 44100), so no `SAMPLE_RATE_LIST` hack is needed to make lib_xua advertise
+  it — that hook existed only to force enumeration of non-standard rates like 141120/70560, and
+  with it the Windows Code 10 risk goes too. Verified: `/proc/asound/card3/stream0` shows
+  `Rates: 88200` with no hook.
+- `88200 % 22050 == 0`, so `audiohw.xc` selects `MCLK_441` = 22.5792 MHz — matching the measurement.
+  The config is self-consistent for the first time.
+- The `static_assert` passes.
+
+**Verified after the change:** XMOS 1000.019 Hz vs laptop mic 1000.016 Hz — agreement to **3 ppm**.
+This also proved the earlier "94080 / effective /60" residual was NOT a second bug, but an artifact
+of the firmware being told a PDM clock that did not exist; every downstream rate calculation
+inherited it. One root cause, not two.
+
+Measured spectrum at 88.2 kHz: passband to ~37 kHz, rolloff from 39 kHz, stopband **-150 dB** by
+41 kHz (against the old /32 config's -38 dB).
+
+### The bandwidth trade costs nothing real
+
+Nyquist drops 70.56 -> 35.28 kHz, usable passband ~46 -> ~29-30 kHz. Measured firecracker content
+in the old `mic4_us/5_explosion.wav`, transient window vs quiet window:
+
+| band | transient vs floor |
+| --- | --- |
+| 1-5 kHz | +14.1 dB |
+| 10-20 kHz | +10.6 dB |
+| **20-30 kHz** | **+15.1 dB** (strongest band in the spectrum) |
+| 30-40 kHz | +1.3 dB |
+| 40-50 kHz | +0.5 dB |
+
+There is **no measurable signal above 30 kHz**, so the discarded bandwidth was empty. Note this
+only shows up when analysing the *transient window*; averaging the whole 8 s file hides it under
+the noise floor, which is why earlier analysis wrongly concluded the recordings held no ultrasound.
+
+### Noise shape after the fix (us64 silence, dB rel peak bin)
+
+```
+  1 kHz  -23.0   1/f rise, normal mic self-noise
+ 5-15    -36..-41  flat floor
+ 20 kHz  -27.2   BUMP: likely the T5838's Helmholtz resonance — a mic characteristic, and useful,
+                 since it is where ultrasonic sensitivity peaks. Invisible before; it was buried.
+ 25-28   -40.5   flat floor
+ 30 kHz  -46.3   decimation filter rolloff begins
+ 32-35   -54     stopband
+```
+
+The floor stays flat to 28 kHz and only rolls off where the *filter* cuts — confirming the mic
+really is passing >20 kHz, i.e. genuinely in ultrasonic mode.
+
+### Still to do
+
+- **Redo the whole benchmark at 88.2 kHz.** Everything recorded before today (mic4_us, mic4_us64)
+  has a wrong time base and cannot be used for any frequency measurement:
+  `arecord -D hw:3,0 -c 4 -f S32_LE -r 88200 -d 8 <file>.wav`
+- Firecracker at `mic4_882`: confirm 20-30 kHz content stands clear of the -107 dBFS floor.
+- Establish whether the clock generator can reach a PDM clock inside 4.2-4.8 MHz (see Finding 2),
+  i.e. whether genuine ultrasonic mode is available at all on this board.
+- `run_ultrasonic_test.sh` still hardcodes `CONFIG="2AMi4o8xxxxxx_mic4_us"` and the old rate — it
+  will neither build nor record the 88.2 kHz config.
+- The rate cases live in the **lib_xua dependency** (`mic_array.cpp`), so they are subject to the
+  same re-fetch hazard as the 141120 patch — see the dependency-patch warning below. Verify with
+  `grep -c 88200 /home/alice/XMOS/lib_xua/lib_xua/src/core/pdm_mics/mic_array.cpp`.
+
+  **Use `lib_xua-mic_array-ultrasonic.patch` from now on** — it is generated from git and carries
+  the 141120, 70560 and 88200 cases plus the `static_assert`, and has been verified with
+  `git apply --check` against a pristine tree. The older `lib_xua-mic_array-141120.patch` is
+  superseded: re-applying
+  it alone would restore the 141120 work but silently drop the /64 fix.
+
 ## 2026-07-24 update: filter decision made, code regenerated from scratch
 Decision on "the decision" below: **accept ~-55 dBFS** (target use case is explosions - loud,
 transient sources, so bandwidth matters more than noise floor). Of the tested filters, **CIC
@@ -68,8 +220,8 @@ End goal: a **4-mic array for beamforming** (colleague handles the algorithm) �
 Deps at `/home/alice/XMOS/lib_xua/` etc. udev rules installed (one-time). Board = card ~3, S32_LE.
 Build: `cmake -G "Unix Makefiles" -B build` (in app_usb_aud_xk_316_mc) then `xmake -C build <config>`.
 Record: `bash record_bench.sh <label> <rate> <channels>` from repo root (stereo = channels 2).
-mic_array.cpp in the lib_xua dep is patched (96000 + 141120 cases); patch committed as
-`lib_xua-mic_array-141120.patch`, re-apply after any fresh dep fetch.
+mic_array.cpp in the lib_xua dep is patched (96000 + 141120 + 70560 cases); patch committed as
+`lib_xua-mic_array-ultrasonic.patch`, re-apply after any fresh dep fetch.
 
 ## Hardware wiring (single mic, NO level shifter)
 Board pins **X1D12** (P1E0/port 1E) and **X1D23** (P1H0/port 1H) are **1.8 V GPIOs**
@@ -86,17 +238,27 @@ this). So the 1.8 V T5838 wires directly, no level shifter:
   ÷32 (stage1) ÷1 (stage2) = 141.12 kHz out, Nyquist 70.56 kHz.
 
 ## ⚠️ Dependency patch that must be re-applied (NOT in this repo's normal source)
-`lib_xua/src/core/pdm_mics/mic_array.cpp` is patched to add the `XUA_PDM_MIC_FREQ==141120` case
-(decimation_factor=1, reuse 48k filters). It lives in the **lib_xua dependency**, which xmake
-re-fetches fresh — so after fetching deps, re-apply:
+`lib_xua/src/core/pdm_mics/mic_array.cpp` is patched to add the ultrasonic rate cases. It lives in
+the **lib_xua dependency**, which xmake re-fetches fresh — so after fetching deps, re-apply:
 ```
 # from the lib_xua dependency root (…/lib_xua):
-git apply /path/to/sw_usb_audio/lib_xua-mic_array-141120.patch
+git apply /path/to/sw_usb_audio/lib_xua-mic_array-ultrasonic.patch
 ```
-(The patch file `lib_xua-mic_array-141120.patch` is committed alongside this HANDOFF.md.)
-This first-pass reuses the 48 kHz filter → band-limited to ~29 kHz. **TODO: design a proper wide
-141.12 kHz Stage-1 filter** (XMOS `lib_mic_array` filter-design Python script, from upstream repo)
-for full ~70 kHz ultrasonic bandwidth.
+Verify: `grep -c 70560 lib_xua/src/core/pdm_mics/mic_array.cpp` → 6.
+
+`lib_xua-mic_array-ultrasonic.patch` (2026-08-04) carries **both** cases — `141120`
+(decimation_factor=1, CIC-7 stage-1+2) and `70560` (decimation_factor=2, reuse 48k filters). It is
+generated straight from git and verified with `git apply --check` against a pristine tree.
+
+> **`lib_xua-mic_array-141120.patch` is superseded.** Re-applying it alone restores the 141120 work
+> but silently drops the /64 fix — i.e. it puts the -49.9 dBFS noise floor back.
+
+> **Historical note.** The TODO that used to sit here — *"design a proper wide 141.12 kHz Stage-1
+> filter for full ~70 kHz ultrasonic bandwidth"* — was pursued (that is what CIC-7 was) and turned
+> out to be the wrong goal. Widening the passband to ~46 kHz cost ~58 dB of noise floor, and
+> measurement later showed the firecracker has **no content above 30 kHz** anyway. The original
+> first-pass instinct — reuse the 48k filters, accept ~29 kHz — was closer to correct; it just also
+> needed stage 2 to do the second decimation. See the 2026-08-04 section at the top.
 
 ## Build / run (XTC Tools 15.3.1; on Linux use the Linux XTC tools + `source SetEnv`)
 Linux env is set up: tools at `/home/alice/XMOS/XTC/15.3.1`. SetEnv derives paths from `$PWD`,
@@ -212,8 +374,9 @@ User needs >= 48kHz bandwidth (confirmed). We have that at ~-55 dBFS. Options:
   emitter's shr int64 overflow). Knobs: S1_PASS/S1_STOP/S1_WEIGHT, S2_CUTOFF. THIS is the live one.
 - Emit C: `~/fdesign/bin/python lib_mic_array/python/stage1.py ultrasonic_filter_int.pkl` (+ stage2.py).
   Paste both blocks -> wire stage1_us_coefs / stage2_us_coefs / stage2_us_shift into mic_array.cpp.
-- ⚠️ ALL ultrasonic work UNCOMMITTED: mic_array.cpp (dep, must fold into lib_xua-mic_array-141120.patch),
-  CMakeLists mic4_us/mic4_96 + SAMPLE_RATE_LIST, filter_design/ scripts. Commit once the path is chosen.
+- ⚠️ (superseded 2026-08-04) The mic_array.cpp dep changes are now folded into
+  `lib_xua-mic_array-ultrasonic.patch`, which carries the 141120 AND 70560 cases. The /64 path
+  resolved the noise floor, so "commit once the path is chosen" is settled — see the top section.
 
 ## 4-mic array — port investigation (2026-07-08)
 Assume T5838 is **1.8 V only** (user is confirming with TDK; 3.3 V explored, datasheet says no) →

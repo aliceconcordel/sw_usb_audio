@@ -52,6 +52,13 @@ Bach_loopback.mid
 Recordings/
 *.wav
 
+# Logic-analyser captures (sigrok). The PDM-clock measurement they document is
+# written up in HANDOFF.md; the raw captures are large and reproducible.
+*.sr
+
+# Per-machine editor workspace
+*.code-workspace
+
 # Generated filter-design artifacts (regenerate via filter_design/*.py -> stage1.py/stage2.py)
 *.pkl
 

@@ -156,6 +156,47 @@ set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_us ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM
                                                                 -DMIC_ARRAY_CONFIG_PDM_FREQ=4515840
                                                                 -mcmodel=large)
 
+# 4-mic /64, 88.2 kHz — the config that describes what the hardware ACTUALLY does (2026-08-04).
+#
+# Supersedes mic4_us64's first attempt, which asked for a PDM clock the board cannot generate.
+# MEASURED with a logic analyser on X1D12: the PDM clock is 5,644,514 Hz, i.e. MCLK 22.5792/4 —
+# NOT the 4.51584 MHz that mic4_us and the first mic4_us64 both requested.
+#
+# Why that happened: mic_array_resources_configure() calls clock_set_divide(clk, divide/2), and
+# xcore clock blocks then divide by 2*that. So only MCLK/(2n) is reachable, and an ODD
+# MIC_ARRAY_CONFIG_MCLK_FREQ/MIC_ARRAY_CONFIG_PDM_FREQ silently truncates:
+#     22579200/4515840 = 5  ->  clock_set_divide(2)  ->  MCLK/4 = 5.6448 MHz.
+# Nothing warned about it; the static_assert now added to mic_array.cpp catches it at build time.
+#
+# So this config states the real clock and derives everything from it:
+#     MCLK 22.5792 MHz / 4 = 5.6448 MHz PDM   (divider 4 - EVEN, realisable, no truncation)
+#     /32 (stage 1 CIC) /2 (stage 2 FIR)      = 88,200 Hz out, Nyquist 44.1 kHz, OSR 64
+#
+# Three things fall out of choosing 88200 rather than an arbitrary number:
+#   - It is a STANDARD rate (2 x 44100), so no SAMPLE_RATE_LIST hack is needed to make lib_xua
+#     advertise it, and the Windows Code 10 / "no configurations available" risk goes away.
+#   - 88200 % 22050 == 0, so audiohw.xc picks MCLK_441 = 22.5792 MHz — matching the measurement.
+#     The config is self-consistent for the first time.
+#   - The static_assert in mic_array.cpp passes.
+#
+# Noise floor: the /64 decimation (stage 2 decimating rather than only compensating droop) is what
+# took the floor from -49.9 to -107.6 dBFS. That result is independent of the rate error, since RMS
+# does not depend on sample rate. Passband ~0.42*fs = ~37 kHz.
+#
+# ⚠️ 5.6448 MHz is ABOVE the T5838's 4.2-4.8 MHz ultrasonic window, so the mic is NOT in ultrasonic
+# mode here. No even divider from either standard MCLK lands in that window (22.5792/4=5.645,
+# /6=3.763; 24.576/4=6.144, /6=4.096), so reaching it needs a non-standard MCLK. See HANDOFF.md.
+set(APP_COMPILER_FLAGS_2AMi4o8xxxxxx_mic4_882 ${SW_USB_AUDIO_FLAGS} -DXUA_NUM_PDM_MICS=4
+                                                                -DXUA_PDM_MIC_FREQ=88200
+                                                                -DMIN_FREQ=88200
+                                                                -DMAX_FREQ=88200
+                                                                -DI2S_CHANS_ADC=0
+                                                                -DMIC_ARRAY_CONFIG_USE_DDR=0
+                                                                -DMIC_ARRAY_CONFIG_PORT_PDM_DATA=XS1_PORT_4F
+                                                                -DMIC_ARRAY_CONFIG_MCLK_FREQ=22579200
+                                                                -DMIC_ARRAY_CONFIG_PDM_FREQ=5644800
+                                                                -mcmodel=large)
+
 # Audio Class 2, Async, I2S Master, 10xInput, 10xOutput, S/PDIF Tx, S/PDIF Rx
 set(APP_COMPILER_FLAGS_2AMi10o10xssxxx ${SW_USB_AUDIO_FLAGS}   -DXUA_SPDIF_TX_EN=1
                                                                -DXUA_SPDIF_RX_EN=1)
