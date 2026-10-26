@@ -175,8 +175,58 @@ This also proved the earlier "94080 / effective /60" residual was NOT a second b
 of the firmware being told a PDM clock that did not exist; every downstream rate calculation
 inherited it. One root cause, not two.
 
-Measured spectrum at 88.2 kHz: passband to ~37 kHz, rolloff from 39 kHz, stopband **-150 dB** by
-41 kHz (against the old /32 config's -38 dB).
+#### Low-pass filter at 88.2 kHz: exact response (computed 2026-10-26)
+
+**-3 dB cutoff = 35,847 Hz** (0.406 x fs, 0.813 x Nyquist).
+
+An earlier version of this section said "passband to ~37 kHz, stopband -150 dB by 41 kHz". Both
+were wrong. 37 kHz is about -7 dB, not the -3 dB point. The -150 dB was the floor of a spectrum
+plotted relative to its own peak bin, not filter attenuation. Computed from the coefficients:
+
+| level | frequency |
+| --- | --- |
+| +/-0.004 dB flat | 0 - 30 kHz |
+| -0.1 dB | 33.44 kHz |
+| -1 dB | 34.80 kHz |
+| **-3 dB** | **35.85 kHz** |
+| -6 dB | 36.72 kHz |
+| -20 dB | 38.74 kHz |
+| -40 dB | 40.14 kHz |
+| -60 dB | 40.90 kHz |
+| -80 dB | 41.30 kHz |
+
+Stopband: the response ripples between about -79 dB and -133 dB from 41.5 kHz to Nyquist
+(44.1 kHz), so the guaranteed attenuation is **~79 dB**, not 150. Response at Nyquist is -83 dB.
+
+The chain, which is the stock 48 kHz filter pair reused at a faster PDM clock:
+
+```
+5.6448 MHz PDM --[stage 1: 5-stage moving-average FIR, 148 non-zero taps of 256, /32]--> 176.4 kHz
+               --[stage 2: 96-tap Kaiser(6.5) FIR, /2]-------------------------------> 88.2 kHz
+```
+
+These are `stage1_48k_coefs` / `stage2_48k_coefs` in `mic_array.cpp`. They match
+`good_48k_filter()` in `lib_mic_array/python/filter_design/design_filter.py` (PDM 3.072 MHz,
+5 moving-average stages, 96-tap stage 2, **20 kHz** stage-2 cutoff) in every respect checked,
+though the generator run itself was not reproduced. Running them at 5.6448 MHz scales every
+frequency by 5.6448 / 3.072 = **1.8375**,
+so the 20 kHz design cutoff becomes 36.75 kHz. That agrees with the computed -6 dB point (36.72 kHz).
+The same coefficients at the original 3.072 MHz give -3 dB at 19.51 kHz and -6 dB at 19.98 kHz.
+
+How it was computed, and how far to trust it:
+
+- Stage 1 is stored bit-interleaved for the vector unit, so the taps were recovered by inverting
+  `Stage1Filter.ToXCoreCoefArray()`. The inverse was checked by round-tripping random taps through
+  the library's own packer (exact match). The recovered stage 1 is perfectly symmetric within its
+  148 non-zero taps; the other 108 slots of the 256 are zero padding.
+- Response is stage 1 evaluated at 5.6448 MHz times stage 2 at 176.4 kHz, normalised to DC.
+- Checked against `Recordings/mic4_882/1_silence.wav`: the steep 38-40 kHz roll-off matches to
+  within about 1-2 dB. The data **cannot confirm the -3 dB point directly**: below 36 kHz the mic's
+  own noise floor is not flat, so the measured spectrum sits 3-6 dB under the computed response
+  there. The cutoff is therefore a computed value, corroborated at the steep part of the roll-off.
+- The mic's own response sits in series with this and is not included. Neither is the DC-blocking
+  high-pass (`MIC_ARRAY_CONFIG_USE_DC_ELIMINATION`, on by default), which was not characterised.
+- The script that does this is not in the repo yet.
 
 ### The bandwidth trade costs nothing real
 
