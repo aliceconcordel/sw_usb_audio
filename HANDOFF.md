@@ -226,7 +226,7 @@ How it was computed, and how far to trust it:
   there. The cutoff is therefore a computed value, corroborated at the steep part of the roll-off.
 - The mic's own response sits in series with this and is not included. Neither is the DC-blocking
   high-pass (`MIC_ARRAY_CONFIG_USE_DC_ELIMINATION`, on by default), which was not characterised.
-- The script that does this is not in the repo yet.
+- Reproduce with `python3 filter_design/lpf_response_882.py` (expects lib_mic_array and the patched lib_xua at their `/home/alice/XMOS/` paths).
 
 ### The bandwidth trade costs nothing real
 
