@@ -39,9 +39,13 @@ LABEL="${LABEL// /_}"
 RATE="${RATE:-88200}"
 CHANS="${CHANS:-4}"
 
+# Addressed by NAME, not number: card numbers are assigned in enumeration order,
+# so the board and the internal audio swap places across reboots and replugs.
+# "channel count not available" is what that looks like — the request landed on
+# the laptop's own mic array instead. 'arecord -l' shows what is present.
 echo
-ask "ALSA card number"      "3"     CARD
-ask "Seconds per recording" "20"    SECS
+ask "ALSA card (name or number)" "MCUAC20" CARD
+ask "Seconds per recording"      "20"      SECS
 
 # cfg | distance | speed
 CONFIGS=(
