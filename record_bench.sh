@@ -1,7 +1,7 @@
 #!/bin/bash
 # Record the benchmark sound set from the XMOS PDM mic(s).
 # Usage:  bash record_bench.sh <label> <rate_hz> [channels] [card] [seconds]
-#   e.g.  bash record_bench.sh mic2_48 48000 2      # stereo 2-mic, card 3, 8s each
+#   e.g.  bash record_bench.sh mic2_48 48000 2      # stereo 2-mic, card MCUAC20, 8s each
 #         bash record_bench.sh mictest 48000 1      # mono single mic
 #
 # Run from the repo root. The firmware for the matching config must already be
@@ -12,7 +12,11 @@ set -e
 LABEL="${1:?need a label, e.g. mic2_48}"
 RATE="${2:?need a sample rate, e.g. 48000 or 96000}"
 CHANS="${3:-1}"
-CARD="${4:-3}"
+# Addressed by NAME, not number: card numbers are assigned in enumeration order,
+# so the board and the internal audio swap places across reboots and replugs.
+# "channel count not available" is what that looks like — the request landed on
+# the laptop's own mic array instead. 'arecord -l' shows what is present.
+CARD="${4:-MCUAC20}"
 SECS="${5:-8}"
 OUT="Recordings/${LABEL}"
 mkdir -p "$OUT"
