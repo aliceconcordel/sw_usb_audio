@@ -1,0 +1,13 @@
+# title: Bearing over time — moving source in six distance/speed configurations
+# label: bot
+# seconds: 20
+# note: flight along +Y (increasing Y), a straight line in every take
+# note: cfg 1-4 hold the distance constant; cfg 5-6 fly a diagonal, so the distance changes across the pass
+# filename: cfg{cfg}_d{distance_m}m_v{speed_mps}mps
+cfg,distance_m,speed_mps
+1,2,1.5
+2,2,5
+3,10,1.5
+4,10,5
+5,2-10,3
+6,10-2,3

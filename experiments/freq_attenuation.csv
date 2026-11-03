@@ -1,0 +1,15 @@
+# title: Frequency attenuation — firecracker explosions at four ranges, two cracker types
+# label: freqatt
+# seconds: 30
+# note: source in the plane of the sensors for every take — only the range changes
+# prompt: Explosions per recording|4|n_events
+# filename: {cracker}_d{distance_m:02}m
+cracker,distance_m
+Ficelle Detonante,1
+Ficelle Detonante,5
+Ficelle Detonante,10
+Ficelle Detonante,20
+Allevi,1
+Allevi,5
+Allevi,10
+Allevi,20
